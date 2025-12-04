@@ -19,14 +19,15 @@ import com.intellij.openapi.vfs.VfsUtil
  */
 class PlopDescribeGeneratorAction(
     private val generatorName: String,
-    description: String? = null
+    description: String? = null,
+    private val plopRootPath: String? = null
 ) : AnAction(generatorName, description, null), DumbAware {
 
     private val log: Logger = Logger.getInstance(PlopDescribeGeneratorAction::class.java)
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        val basePath = project.basePath ?: return
+        val basePath = plopRootPath ?: project.basePath ?: return
 
         object : Task.Backgroundable(project, "Loading Plop generator prompts", false) {
             private lateinit var desc: PlopCli.PlopGeneratorDescription

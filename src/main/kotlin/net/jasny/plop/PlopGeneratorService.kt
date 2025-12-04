@@ -4,6 +4,7 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -24,6 +25,11 @@ class PlopGeneratorService(@Suppress("unused") private val project: Project) {
     private var initialized: Boolean = false
 
     private val refreshing = AtomicBoolean(false)
+
+    // Per-root (monorepo) cache/state
+    private val rootCache: MutableMap<String, List<PlopGenerator>> = ConcurrentHashMap()
+    private val rootInitialized: MutableMap<String, Boolean> = ConcurrentHashMap()
+    private val rootRefreshing: MutableMap<String, AtomicBoolean> = ConcurrentHashMap()
 
     data class PlopGenerator(val name: String, val description: String)
 
@@ -82,5 +88,54 @@ class PlopGeneratorService(@Suppress("unused") private val project: Project) {
         cachedGenerators = emptyList()
         initialized = false
         refreshAsync()
+    }
+
+    /**
+     * List generators for a specific root directory (monorepo support).
+     * This does not use or affect the project-level cache; it queries directly for the given root.
+     */
+    fun listGeneratorsForRoot(rootPath: String): List<PlopGenerator> {
+        return try {
+            PlopCli(project).listGenerators(rootPath)
+        } catch (t: Throwable) {
+            log.warn("Failed to list generators for root '$rootPath'", t)
+            emptyList()
+        }
+    }
+
+    /**
+     * Get cached generators for a specific plop root. If not yet cached, triggers background refresh.
+     * Never blocks EDT/ReadAction.
+     */
+    fun getGeneratorsForRoot(rootPath: String): List<PlopGenerator> {
+        val current = rootCache[rootPath]
+        if (current == null || current.isEmpty()) {
+            refreshRootAsync(rootPath)
+        }
+        return current ?: emptyList()
+    }
+
+    /** Whether a background refresh for this root has completed at least once. */
+    fun isInitializedForRoot(rootPath: String): Boolean = rootInitialized[rootPath] == true
+
+    /** Refresh generators for a specific root on a pooled thread. */
+    fun refreshRootAsync(rootPath: String) {
+        val flag = rootRefreshing.getOrPut(rootPath) { AtomicBoolean(false) }
+        if (!flag.compareAndSet(false, true)) return
+
+        ApplicationManager.getApplication().executeOnPooledThread {
+            try {
+                val list = PlopCli(project).listGenerators(rootPath)
+                rootCache[rootPath] = list
+                rootInitialized[rootPath] = true
+                if (list.isEmpty()) {
+                    log.info("No Plop generators found for root '$rootPath' (or failed to list). Cache set to empty list.")
+                }
+            } catch (t: Throwable) {
+                log.warn("Failed to refresh Plop generators for root '$rootPath' in background", t)
+            } finally {
+                flag.set(false)
+            }
+        }
     }
 }

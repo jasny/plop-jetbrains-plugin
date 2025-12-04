@@ -103,7 +103,7 @@ async function main() {
     const failures = Array.isArray(result && result.failures) ? result.failures : [];
     const ok = failures.length === 0;
     const message = ok
-      ? (changes.length > 0 ? `Plop: ${changes.length} file(s) changed` : 'Plop: generator completed')
+      ? (changes.length > 0 ? `Plop: ${changes.length} file(s) generated` : 'Plop: generator completed')
       : `Plop: ${failures.length} failure(s) while generating`;
 
     safePrintJson({ ok, message, changes });
