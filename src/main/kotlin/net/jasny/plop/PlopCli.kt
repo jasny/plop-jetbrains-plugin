@@ -104,6 +104,108 @@ class PlopCli(private val project: Project) {
         }
     }
 
+    /** Result of running a generator. */
+    data class RunResult(
+        val success: Boolean,
+        val message: String,
+        val changedPaths: List<String> = emptyList()
+    )
+
+    /**
+     * Run a plop generator programmatically by invoking a Node helper script.
+     * Returns a RunResult with success=false and a human-readable message on any failure.
+     */
+    fun runGenerator(projectDir: String, generatorName: String, answers: Map<String, Any?>): RunResult {
+        val scriptFile = try {
+            extractResource("plop/run-generator.js", "run-generator.js")
+        } catch (e: Exception) {
+            log.warn("Failed to extract run-generator.js resource", e)
+            return RunResult(false, "Failed to prepare Plop runner script")
+        }
+
+        val nodeExecutable = resolveNodeInterpreterPath() ?: run {
+            try { FileUtil.delete(scriptFile) } catch (_: Throwable) {}
+            return RunResult(false, "Node.js interpreter not configured")
+        }
+
+        val plopInfo = detectPlopfile(projectDir) ?: run {
+            try { FileUtil.delete(scriptFile) } catch (_: Throwable) {}
+            return RunResult(false, "No plopfile found in project")
+        }
+
+        val nodeParams = buildNodeParamsForTs(nodeExecutable, projectDir, plopInfo)
+
+        val answersJson = try {
+            Gson().toJson(answers)
+        } catch (t: Throwable) {
+            log.warn("Failed to serialize answers to JSON", t)
+            "{}"
+        }
+
+        val commandLine = GeneralCommandLine(nodeExecutable)
+            .withParameters(nodeParams + listOf(scriptFile.absolutePath, projectDir, plopInfo.path, plopInfo.moduleKind, generatorName, answersJson))
+            .withWorkDirectory(projectDir)
+
+        if (log.isDebugEnabled) {
+            log.debug(
+                "About to execute Node script to run plop generator: " +
+                    "node='${nodeExecutable}', script='${scriptFile.absolutePath}', workDir='${projectDir}', gen='${generatorName}', plop='${plopInfo.path}', kind='${plopInfo.moduleKind}', params='${nodeParams.joinToString(" ")}'"
+            )
+        }
+
+        return try {
+            val output = ExecUtil.execAndGetOutput(commandLine)
+
+            if (log.isDebugEnabled) {
+                log.debug(
+                    "Node run script finished: exitCode=${output.exitCode}, " +
+                        "stdout.length=${output.stdout.length}, stderr.length=${output.stderr.length}"
+                )
+                if (output.stderr.isNotBlank()) {
+                    log.debug("Node run script stderr:\n${output.stderr}")
+                }
+                if (output.stdout.isBlank()) {
+                    log.debug("Node run script stdout is blank")
+                } else {
+                    val preview = if (output.stdout.length > 1000) output.stdout.substring(0, 1000) + "..." else output.stdout
+                    log.debug("Node run script stdout (preview up to 1000 chars):\n$preview")
+                }
+            }
+
+            if (output.exitCode != 0) {
+                log.warn("Run script exited with non-zero code: ${output.exitCode}. stderr=${output.stderr}. stdout=${output.stdout}")
+                RunResult(false, "Plop generator failed to run (exit ${output.exitCode}). See logs for details.")
+            } else {
+                parseRunResultJson(output.stdout)
+            }
+        } catch (t: Throwable) {
+            log.warn("Failed to execute Node to run generator '$generatorName'", t)
+            RunResult(false, "Failed to execute Node to run generator")
+        } finally {
+            try { FileUtil.delete(scriptFile) } catch (_: Throwable) {}
+        }
+    }
+
+    private fun parseRunResultJson(json: String): RunResult {
+        return try {
+            val gson = Gson()
+            val obj = gson.fromJson(json, java.util.LinkedHashMap::class.java) as? Map<*, *> ?: emptyMap<String, Any?>()
+            val ok = (obj["ok"] as? Boolean) ?: (obj["success"] as? Boolean) ?: false
+            val msg = (obj["message"] as? String)?.takeIf { it.isNotBlank() }
+                ?: if (ok) "Plop: generator completed" else "Plop: generator failed"
+            val changesAny = obj["changes"]
+            val changedPaths: List<String> = when (changesAny) {
+                is Collection<*> -> changesAny.mapNotNull { it?.toString() }
+                is Array<*> -> changesAny.mapNotNull { it?.toString() }
+                else -> emptyList()
+            }
+            RunResult(ok, msg, changedPaths)
+        } catch (e: Exception) {
+            log.warn("Failed to parse run result JSON", e)
+            RunResult(false, "Invalid JSON from Plop run script")
+        }
+    }
+
     /**
      * Describe a specific generator's prompts by invoking a Node helper script.
      * Runs the process and returns a DTO. On any error, returns an empty description with no prompts.
