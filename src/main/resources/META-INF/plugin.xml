@@ -13,8 +13,20 @@
     <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-description -->
     <description><![CDATA[
-        Adds a "Plop" submenu under the New context menu. For now, it shows a
-        dynamic list of fake generator actions built at runtime.
+        <p>Run <b>Plop</b> code generators right from your IDE.</p>
+        <p>This plugin detects a project's <code>plopfile.js</code>/<code>plopfile.ts</code>, lists available generators,
+        and adds a <b>Plop</b> submenu to the <i>New</i> context menu. Pick a generator, answer the prompts in the IDE,
+        and the plugin invokes Plop via Node.js to create or modify files. Works with monorepos by discovering
+        generators per content root.</p>
+        <ul>
+          <li>Automatic discovery of Plop generators</li>
+          <li>Convenient <i>New | Plop</i> submenu with dynamically built actions</li>
+          <li>Interactive prompts and background execution</li>
+          <li>Support for <code>plopfile.js</code> and <code>plopfile.ts</code> (with ts-node/register)</li>
+          <li>Monorepo-aware: resolves generators per root</li>
+        </ul>
+        <p><b>Requirements</b>: Node.js installed and available on PATH. A project-level Plop setup
+        (plopfile and <code>plop</code> package) is expected. The optional NodeJS plugin may improve Node detection.</p>
     ]]></description>
 
     <!-- Product and plugin compatibility requirements.
