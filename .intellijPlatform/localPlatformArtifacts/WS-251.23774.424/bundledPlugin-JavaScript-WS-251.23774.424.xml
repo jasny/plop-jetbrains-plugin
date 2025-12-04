@@ -1,0 +1,15 @@
+<ivy-module version="2.0">
+  <info organisation="bundledPlugin" module="JavaScript" revision="WS-251.23774.424"/>
+  <configurations>
+    <conf name="default" visibility="public"/>
+  </configurations>
+  <publications>
+    <artifact name="javascript-plugin" ext="jar" conf="default" url="plugins/javascript-plugin/lib"/>
+    <artifact name="javascript-frontback" ext="jar" conf="default" url="plugins/javascript-plugin/lib"/>
+  </publications>
+  <dependencies>
+    <dependency org="bundledPlugin" name="com.intellij.modules.json" rev="WS-251.23774.424"/>
+    <dependency org="bundledPlugin" name="com.intellij.css" rev="WS-251.23774.424"/>
+    <dependency org="bundledPlugin" name="com.intellij.css" rev="WS-251.23774.424"/>
+  </dependencies>
+</ivy-module>

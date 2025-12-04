@@ -1,0 +1,55 @@
+<!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
+<idea-plugin>
+    <!-- Unique identifier of the plugin. It should be FQN. It cannot be changed between the plugin versions. -->
+    <id>net.jasny.plop</id>
+
+    <!-- Public plugin name should be written in Title Case.
+         Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-name -->
+    <name>Plop</name>
+
+    <!-- A displayed Vendor name or Organization ID displayed on the Plugins Page. -->
+    <vendor url="https://www.jasny.net">Jasny</vendor>
+
+    <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
+         Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-description -->
+    <description><![CDATA[
+        Adds a "Plop" submenu under the New context menu. For now, it shows a
+        dynamic list of fake generator actions built at runtime.
+    ]]></description>
+
+    <!-- Product and plugin compatibility requirements.
+         Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
+    <depends>com.intellij.modules.platform</depends>
+
+    <!-- Extension points defined by the plugin.
+         Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Notification group used by the actions -->
+        <notificationGroup id="Plop Notifications" displayType="BALLOON" isLogByDefault="true"/>
+
+        <!-- Project-level service that provides Plop generators -->
+    </extensions>
+
+    <!-- Optional dependency on the NodeJS plugin. The config-file is required by the platform schema
+         even if we don't contribute any extensions that depend on NodeJS. The referenced file can be
+         an empty descriptor. -->
+    <depends optional="true" config-file="plugin-nodejs.xml">NodeJS</depends>
+
+    <!-- Actions and groups contributed by the plugin -->
+    <actions>
+        <!-- Popup action group that appears as a submenu under the New menu -->
+        <group id="net.jasny.plop.PlopNewActionGroup"
+               icon="/icons/plop.svg"
+               class="net.jasny.plop.PlopNewActionGroup"
+               text="Plop"
+               popup="true">
+            <!-- Register the Plop submenu inside the New menu. No child actions are declared in XML; they are added dynamically in code. -->
+            <add-to-group group-id="NewGroup" anchor="last"/>
+        </group>
+    </actions>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Warm up Plop generators cache on project startup (runs in background) -->
+        <postStartupActivity implementation="net.jasny.plop.PlopStartupActivity"/>
+    </extensions>
+</idea-plugin>

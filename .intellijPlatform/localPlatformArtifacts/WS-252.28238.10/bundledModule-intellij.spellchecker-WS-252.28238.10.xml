@@ -1,0 +1,15 @@
+<ivy-module version="2.0">
+  <info organisation="bundledModule" module="intellij.spellchecker" revision="WS-252.28238.10"/>
+  <configurations>
+    <conf name="default" visibility="public"/>
+  </configurations>
+  <publications>
+    <artifact name="intellij.spellchecker" ext="jar" conf="default" url="lib/modules"/>
+  </publications>
+  <dependencies>
+    <dependency org="bundledModule" name="intellij.platform.backend" rev="WS-252.28238.10"/>
+    <dependency org="bundledModule" name="intellij.platform.vcs.impl" rev="WS-252.28238.10"/>
+    <dependency org="bundledModule" name="intellij.libraries.lucene.common" rev="WS-252.28238.10"/>
+    <dependency org="bundledModule" name="intellij.libraries.ai.grazie.spell.gec.engine.local" rev="WS-252.28238.10"/>
+  </dependencies>
+</ivy-module>

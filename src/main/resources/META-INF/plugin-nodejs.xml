@@ -1,0 +1,3 @@
+<idea-plugin>
+    <!-- Intentionally left empty. This descriptor is loaded only when the optional NodeJS dependency is present. -->
+</idea-plugin>

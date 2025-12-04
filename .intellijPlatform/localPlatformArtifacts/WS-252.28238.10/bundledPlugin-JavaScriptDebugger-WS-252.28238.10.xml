@@ -1,0 +1,18 @@
+<ivy-module version="2.0">
+  <info organisation="bundledPlugin" module="JavaScriptDebugger" revision="WS-252.28238.10"/>
+  <configurations>
+    <conf name="default" visibility="public"/>
+  </configurations>
+  <publications>
+    <artifact name="javascript-debugger-frontend" ext="jar" conf="default" url="plugins/javascript-debugger/lib"/>
+    <artifact name="javascript-debugger" ext="jar" conf="default" url="plugins/javascript-debugger/lib"/>
+    <artifact name="intellij.javascript.debugger.frontend" ext="jar" conf="default" url="plugins/javascript-debugger/lib/modules"/>
+    <artifact name="intellij.javascript.debugger.backend" ext="jar" conf="default" url="plugins/javascript-debugger/lib/modules"/>
+    <artifact name="intellij.javascript.debugger.shared" ext="jar" conf="default" url="plugins/javascript-debugger/lib/modules"/>
+    <artifact name="intellij.javascript.reactNativeDebugger" ext="jar" conf="default" url="plugins/javascript-debugger/lib/modules"/>
+    <artifact name="intellij.javascript.debugger.webstorm.specific" ext="jar" conf="default" url="plugins/javascript-debugger/lib/modules"/>
+  </publications>
+  <dependencies>
+    <dependency org="bundledModule" name="intellij.json.backend" rev="WS-252.28238.10"/>
+  </dependencies>
+</ivy-module>

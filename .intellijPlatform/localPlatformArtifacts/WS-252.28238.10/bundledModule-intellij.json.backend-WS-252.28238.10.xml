@@ -1,0 +1,13 @@
+<ivy-module version="2.0">
+  <info organisation="bundledModule" module="intellij.json.backend" revision="WS-252.28238.10"/>
+  <configurations>
+    <conf name="default" visibility="public"/>
+  </configurations>
+  <publications>
+    <artifact name="intellij.json.backend" ext="jar" conf="default" url="plugins/json/lib/modules"/>
+  </publications>
+  <dependencies>
+    <dependency org="bundledModule" name="intellij.platform.backend" rev="WS-252.28238.10"/>
+    <dependency org="bundledModule" name="intellij.spellchecker" rev="WS-252.28238.10"/>
+  </dependencies>
+</ivy-module>
