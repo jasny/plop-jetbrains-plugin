@@ -95,6 +95,71 @@ class PlopCli(private val project: Project) {
     }
 
     /**
+     * Describe a specific generator's prompts by invoking a Node helper script.
+     * Runs the process and returns a DTO. On any error, returns an empty description with no prompts.
+     */
+    fun describeGenerator(projectDir: String, generatorName: String): PlopGeneratorDescription {
+        val scriptFile = try {
+            extractResource("plop/describe-generator.js", "describe-generator.js")
+        } catch (e: Exception) {
+            log.warn("Failed to extract describe-generator.js resource", e)
+            return PlopGeneratorDescription(name = generatorName, description = "", prompts = emptyList())
+        }
+
+        val nodeExecutable = resolveNodeInterpreterPath() ?: run {
+            try { FileUtil.delete(scriptFile) } catch (_: Throwable) {}
+            return PlopGeneratorDescription(name = generatorName, description = "", prompts = emptyList())
+        }
+
+        val commandLine = GeneralCommandLine(nodeExecutable)
+            .withParameters(listOf(scriptFile.absolutePath, projectDir, generatorName))
+            .withWorkDirectory(projectDir)
+
+        if (log.isDebugEnabled) {
+            log.debug(
+                "About to execute Node script to describe plop generator: " +
+                    "node='${nodeExecutable}', script='${scriptFile.absolutePath}', workDir='${projectDir}', gen='${generatorName}'"
+            )
+        }
+
+        return try {
+            val output = ExecUtil.execAndGetOutput(commandLine)
+
+            if (log.isDebugEnabled) {
+                log.debug(
+                    "Node describe script finished: exitCode=${output.exitCode}, " +
+                        "stdout.length=${output.stdout.length}, stderr.length=${output.stderr.length}"
+                )
+                if (output.stderr.isNotBlank()) {
+                    log.debug("Node describe script stderr:\n${output.stderr}")
+                }
+                if (output.stdout.isBlank()) {
+                    log.debug("Node describe script stdout is blank")
+                } else {
+                    val preview = if (output.stdout.length > 1000) output.stdout.substring(0, 1000) + "..." else output.stdout
+                    log.debug("Node describe script stdout (preview up to 1000 chars):\n$preview")
+                }
+            }
+
+            if (output.exitCode != 0) {
+                log.warn("Describe script exited with non-zero code: ${output.exitCode}. stderr=${output.stderr}. stdout=${output.stdout}")
+                PlopGeneratorDescription(name = generatorName, description = "", prompts = emptyList())
+            } else {
+                val desc = parseGeneratorDescriptionJson(output.stdout)
+                if (log.isDebugEnabled) {
+                    log.debug("Parsed ${desc.prompts.size} prompts for generator '${desc.name}'")
+                }
+                desc
+            }
+        } catch (t: Throwable) {
+            log.warn("Failed to execute Node to describe generator '$generatorName'", t)
+            PlopGeneratorDescription(name = generatorName, description = "", prompts = emptyList())
+        } finally {
+            try { FileUtil.delete(scriptFile) } catch (_: Throwable) {}
+        }
+    }
+
+    /**
      * Uses the Node.js plugin to find the configured Node interpreter for the current project.
      * Shows a user-facing notification if the plugin is missing/disabled, or if no interpreter
      * is configured. Returns the absolute path to the Node executable, or null on failure.
@@ -210,6 +275,20 @@ class PlopCli(private val project: Project) {
         return scriptFile
     }
 
+    private fun extractResource(resourcePath: String, fileName: String): File {
+        val url = javaClass.classLoader.getResource(resourcePath)
+            ?: throw IllegalStateException("Resource not found: $resourcePath")
+        val input: InputStream = url.openStream()
+        val tempDir = FileUtil.createTempDirectory("plop-script", null, true)
+        val file = File(tempDir, fileName)
+        input.use { ins ->
+            file.outputStream().use { out ->
+                ins.copyTo(out)
+            }
+        }
+        return file
+    }
+
     private fun parseGeneratorsJson(json: String): List<PlopGeneratorService.PlopGenerator> {
         if (json.isBlank()) return emptyList()
         return try {
@@ -226,4 +305,51 @@ class PlopCli(private val project: Project) {
     }
 
     private data class GeneratorDto(val name: String?, val description: String?)
+
+    // DTOs for generator description
+    data class PlopGeneratorDescription(
+        val name: String,
+        val description: String,
+        val prompts: List<Prompt>
+    )
+
+    data class Prompt(
+        val type: String?,
+        val name: String?,
+        val message: String?,
+        val default: com.google.gson.JsonElement?,
+        val choices: com.google.gson.JsonElement?
+    )
+
+    private fun parseGeneratorDescriptionJson(json: String): PlopGeneratorDescription {
+        if (json.isBlank()) return PlopGeneratorDescription(name = "", description = "", prompts = emptyList())
+        return try {
+            val gson = Gson()
+            val dto = gson.fromJson(json, GeneratorDescriptionDto::class.java)
+            val prompts = dto.prompts?.map {
+                Prompt(
+                    type = it.type,
+                    name = it.name,
+                    message = it.message,
+                    default = it.default,
+                    choices = it.choices
+                )
+            } ?: emptyList()
+            PlopGeneratorDescription(dto.name.orEmpty(), dto.description.orEmpty(), prompts)
+        } catch (e: JsonSyntaxException) {
+            log.warn("Failed to parse generator description JSON", e)
+            PlopGeneratorDescription(name = "", description = "", prompts = emptyList())
+        } catch (e: Exception) {
+            log.warn("Unexpected error parsing generator description JSON", e)
+            PlopGeneratorDescription(name = "", description = "", prompts = emptyList())
+        }
+    }
+
+    private data class GeneratorDescriptionDto(
+        val name: String?, val description: String?, val prompts: List<PromptDto>?
+    )
+    private data class PromptDto(
+        val type: String?, val name: String?, val message: String?,
+        val default: com.google.gson.JsonElement?, val choices: com.google.gson.JsonElement?
+    )
 }

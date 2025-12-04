@@ -31,7 +31,7 @@ class PlopNewActionGroup : ActionGroup(), DumbAware {
         }
 
         return generators
-            .map { PlopFakeGeneratorAction(it.name, it.description) }
+            .map { PlopDescribeGeneratorAction(it.name, it.description) }
             .toTypedArray()
     }
 

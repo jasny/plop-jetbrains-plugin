@@ -73,4 +73,14 @@ class PlopGeneratorService(@Suppress("unused") private val project: Project) {
             }
         }
     }
+
+    /**
+     * Clear the cached list and immediately trigger a background refresh.
+     * Marks the service as not initialized so the UI can show a loading state.
+     */
+    fun invalidateAndRefresh() {
+        cachedGenerators = emptyList()
+        initialized = false
+        refreshAsync()
+    }
 }
