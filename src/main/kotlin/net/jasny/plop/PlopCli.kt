@@ -38,14 +38,24 @@ class PlopCli(private val project: Project) {
             try { FileUtil.delete(scriptFile) } catch (_: Throwable) {}
             return emptyList()
         }
+        // Detect plopfile and decide how to run Node (TS loader, ESM bridge handled by helper)
+        val plopInfo = detectPlopfile(projectDir)
+        if (plopInfo == null) {
+            if (log.isDebugEnabled) log.debug("No plopfile found in $projectDir")
+            try { FileUtil.delete(scriptFile) } catch (_: Throwable) {}
+            return emptyList()
+        }
+
+        val nodeParams = buildNodeParamsForTs(nodeExecutable, projectDir, plopInfo)
+
         val commandLine = GeneralCommandLine(nodeExecutable)
-            .withParameters(listOf(scriptFile.absolutePath, projectDir))
+            .withParameters(nodeParams + listOf(scriptFile.absolutePath, projectDir, plopInfo.path, plopInfo.moduleKind))
             .withWorkDirectory(projectDir)
 
         if (log.isDebugEnabled) {
             log.debug(
                 "About to execute Node script to list plop generators: " +
-                    "node='${nodeExecutable}', script='${scriptFile.absolutePath}', workDir='${projectDir}'"
+                    "node='${nodeExecutable}', script='${scriptFile.absolutePath}', workDir='${projectDir}', plop='${plopInfo.path}', kind='${plopInfo.moduleKind}', params='${nodeParams.joinToString(" ")}'"
             )
         }
 
@@ -111,14 +121,22 @@ class PlopCli(private val project: Project) {
             return PlopGeneratorDescription(name = generatorName, description = "", prompts = emptyList())
         }
 
+        val plopInfo = detectPlopfile(projectDir)
+        if (plopInfo == null) {
+            try { FileUtil.delete(scriptFile) } catch (_: Throwable) {}
+            return PlopGeneratorDescription(name = generatorName, description = "", prompts = emptyList())
+        }
+
+        val nodeParams = buildNodeParamsForTs(nodeExecutable, projectDir, plopInfo)
+
         val commandLine = GeneralCommandLine(nodeExecutable)
-            .withParameters(listOf(scriptFile.absolutePath, projectDir, generatorName))
+            .withParameters(nodeParams + listOf(scriptFile.absolutePath, projectDir, plopInfo.path, plopInfo.moduleKind, generatorName))
             .withWorkDirectory(projectDir)
 
         if (log.isDebugEnabled) {
             log.debug(
                 "About to execute Node script to describe plop generator: " +
-                    "node='${nodeExecutable}', script='${scriptFile.absolutePath}', workDir='${projectDir}', gen='${generatorName}'"
+                    "node='${nodeExecutable}', script='${scriptFile.absolutePath}', workDir='${projectDir}', gen='${generatorName}', plop='${plopInfo.path}', kind='${plopInfo.moduleKind}', params='${nodeParams.joinToString(" ")}'"
             )
         }
 
@@ -352,4 +370,109 @@ class PlopCli(private val project: Project) {
         val type: String?, val name: String?, val message: String?,
         val default: com.google.gson.JsonElement?, val choices: com.google.gson.JsonElement?
     )
+
+    // --- Plopfile detection and Node runner flags ---
+
+    private data class PlopfileInfo(val path: String, val moduleKind: String, val isTs: Boolean)
+
+    private fun detectPlopfile(projectDir: String): PlopfileInfo? {
+        val candidates = listOf(
+            "plopfile.mts",
+            "plopfile.cts",
+            "plopfile.ts",
+            "plopfile.mjs",
+            "plopfile.cjs",
+            "plopfile.js",
+        )
+        val base = File(projectDir)
+        val file = candidates.map { File(base, it) }.firstOrNull { it.isFile }
+            ?: return null
+
+        val ext = file.extension.lowercase()
+        return when (ext) {
+            "cjs" -> PlopfileInfo(file.absolutePath, "cjs", false)
+            "mjs" -> PlopfileInfo(file.absolutePath, "esm", false)
+            "cts" -> PlopfileInfo(file.absolutePath, "cjs", true)
+            "mts" -> PlopfileInfo(file.absolutePath, "esm", true)
+            "ts" -> {
+                val kind = nearestPackageType(File(projectDir))
+                PlopfileInfo(file.absolutePath, if (kind == "module") "esm" else "cjs", true)
+            }
+            "js" -> {
+                val kind = nearestPackageType(File(projectDir))
+                PlopfileInfo(file.absolutePath, if (kind == "module") "esm" else "cjs", false)
+            }
+            else -> PlopfileInfo(file.absolutePath, "cjs", false)
+        }
+    }
+
+    private fun nearestPackageType(startDir: File): String {
+        var dir: File? = startDir
+        while (dir != null) {
+            val pkg = File(dir, "package.json")
+            if (pkg.isFile) {
+                return try {
+                    val text = pkg.readText()
+                    val type = com.google.gson.JsonParser.parseString(text).asJsonObject.get("type")?.asString
+                    if (type == "module") "module" else "commonjs"
+                } catch (_: Throwable) {
+                    "commonjs"
+                }
+            }
+            dir = dir.parentFile
+        }
+        return "commonjs"
+    }
+
+    private fun buildNodeParamsForTs(nodeExecutable: String, projectDir: String, info: PlopfileInfo): List<String> {
+        if (!info.isTs) return emptyList()
+        // Prefer tsx --loader for any TS plopfile so helpers can import TS directly
+        val tsx = resolveNodePackageUpwards(projectDir, "tsx")
+        if (tsx != null) {
+            val major = getNodeMajorVersion(nodeExecutable)
+            // Node 22+ switched to --import for loaders like tsx
+            return if (major >= 22) listOf("--import", "tsx") else listOf("--loader", "tsx")
+        }
+        // Fallback to ts-node/register/transpile-only
+        val tsNode = resolveNodePackageUpwards(projectDir, "ts-node")
+        if (tsNode != null) {
+            return listOf("-r", "ts-node/register/transpile-only")
+        }
+        // Fallback to @swc/register
+        val swc = resolveNodePackageUpwards(projectDir, "@swc/register")
+        if (swc != null) {
+            return listOf("-r", "@swc/register")
+        }
+        // No loader found; run without flags (helpers will likely fail gracefully)
+        return emptyList()
+    }
+
+    private fun getNodeMajorVersion(nodeExecutable: String): Int {
+        return try {
+            val cmd = GeneralCommandLine(nodeExecutable).withParameters("--version")
+            val out = ExecUtil.execAndGetOutput(cmd)
+            val ver = out.stdout.trim() // e.g. v22.3.0
+            val cleaned = if (ver.startsWith("v")) ver.substring(1) else ver
+            val majorStr = cleaned.takeWhile { it.isDigit() }
+            majorStr.toIntOrNull() ?: 0
+        } catch (_: Throwable) {
+            0
+        }
+    }
+
+    private fun resolveNodePackageUpwards(projectDir: String, packageName: String): File? {
+        var dir: File? = File(projectDir)
+        while (dir != null) {
+            val pkgDir = if (packageName.startsWith("@")) {
+                // Scoped package like @swc/register -> node_modules/@swc/register
+                File(File(dir, "node_modules"), packageName)
+            } else {
+                File(File(dir, "node_modules"), packageName)
+            }
+            val pkgJson = File(pkgDir, "package.json")
+            if (pkgJson.isFile) return pkgDir
+            dir = dir.parentFile
+        }
+        return null
+    }
 }

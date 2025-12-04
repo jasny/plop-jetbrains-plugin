@@ -1,28 +1,22 @@
-// Helper script to describe a specific Plop generator's prompts.
-//
-// Usage: node describe-generator.js <projectDir> <generatorName>
-// - Loads the project's plopfile using node-plop resolved from the project directory
-// - Prints a JSON object to stdout: { name, description, prompts: [{ type, name, message, default, choices }] }
-// - On any (soft) error, prints an object with empty prompts and exits 0; warnings go to stderr
 
 /* eslint-disable no-console */
 
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
-const { createRequire } = require('node:module');
+const { createRequire, pathToFileURL } = require('node:module');
 
-function findPlopfile(projectDir) {
-  const candidates = [
-    'plopfile.js',
-    'plopfile.cjs',
-  ];
-  for (const name of candidates) {
-    const full = path.join(projectDir, name);
-    if (fs.existsSync(full) && fs.statSync(full).isFile()) {
-      return full;
-    }
-  }
-  return null;
+function createEsmBridge(plopfileAbsPath) {
+  const fileUrl = String(pathToFileURL(plopfileAbsPath));
+  const content = `module.exports = async function(plop){
+  const mod = await import(${JSON.stringify(fileUrl)});
+  const fn = typeof mod === 'function' ? mod : (typeof mod.default === 'function' ? mod.default : null);
+  if (!fn) throw new Error('Plopfile does not export a function');
+  return fn(plop);
+};`;
+  const tmp = path.join(os.tmpdir(), `plop-bridge-${Date.now()}-${Math.random().toString(36).slice(2)}.cjs`);
+  fs.writeFileSync(tmp, content, 'utf8');
+  return tmp;
 }
 
 function normalizeChoice(choice) {
@@ -55,7 +49,9 @@ function mapQuestion(q) {
 async function main() {
   try {
     const projectDir = process.argv[2] && String(process.argv[2]).trim() ? process.argv[2] : process.cwd();
-    const generatorName = process.argv[3] && String(process.argv[3]).trim() ? process.argv[3] : '';
+    const plopfilePath = process.argv[3] && String(process.argv[3]).trim() ? process.argv[3] : '';
+    const moduleKind = process.argv[4] && String(process.argv[4]).trim() ? process.argv[4] : 'cjs';
+    const generatorName = process.argv[5] && String(process.argv[5]).trim() ? process.argv[5] : '';
 
     const fallback = JSON.stringify({ name: generatorName, description: '', prompts: [] }, null, 2);
 
@@ -65,9 +61,8 @@ async function main() {
       return;
     }
 
-    const plopfilePath = findPlopfile(projectDir);
     if (!plopfilePath) {
-      console.warn(`[plop] No plopfile found in directory: ${projectDir}`);
+      console.warn('[plop] Missing plopfile path argument');
       console.log(fallback);
       return;
     }
@@ -87,7 +82,8 @@ async function main() {
       return;
     }
 
-    const plop = await nodePlop(plopfilePath, { destBasePath: projectDir });
+    const entryPath = moduleKind === 'esm' ? createEsmBridge(plopfilePath) : plopfilePath;
+    const plop = await nodePlop(entryPath, { destBasePath: projectDir });
     const gen = typeof plop.getGenerator === 'function' ? plop.getGenerator(generatorName) : null;
     if (!gen) {
       console.warn(`[plop] Generator not found: ${generatorName}`);

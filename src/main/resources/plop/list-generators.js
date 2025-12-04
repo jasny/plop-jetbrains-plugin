@@ -1,40 +1,38 @@
 // Simple helper script to list Plop generators for a given project directory.
 //
-// Usage: node list-generators.js <projectDir>
-// - Tries to load a plopfile from the given project directory using @plopjs/core (or plop).
+// Usage: node list-generators.js <projectDir> <plopfilePath> <moduleKind>
+// - Loads a project's plopfile (CJS/ESM) using node-plop resolved from that project.
 // - Prints a JSON array to stdout: [{ name, description }, ...]
 // - On any error, prints [] and exits with code 0 (soft fail).
 
 /* eslint-disable no-console */
 
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
-const { createRequire } = require('node:module');
+const { createRequire, pathToFileURL } = require('node:module');
 
-function findPlopfile(projectDir) {
-  const candidates = [
-    'plopfile.js',
-    'plopfile.cjs',
-    // We intentionally skip .mjs/.ts here to avoid ESM/ts-node complications in this simple helper.
-  ];
-
-  for (const name of candidates) {
-    const full = path.join(projectDir, name);
-    if (fs.existsSync(full) && fs.statSync(full).isFile()) {
-      return full;
-    }
-  }
-  return null;
+function createEsmBridge(plopfileAbsPath) {
+  const fileUrl = String(pathToFileURL(plopfileAbsPath));
+  const content = `module.exports = async function(plop){
+  const mod = await import(${JSON.stringify(fileUrl)});
+  const fn = typeof mod === 'function' ? mod : (typeof mod.default === 'function' ? mod.default : null);
+  if (!fn) throw new Error('Plopfile does not export a function');
+  return fn(plop);
+};`;
+  const tmp = path.join(os.tmpdir(), `plop-bridge-${Date.now()}-${Math.random().toString(36).slice(2)}.cjs`);
+  fs.writeFileSync(tmp, content, 'utf8');
+  return tmp;
 }
 
 async function main() {
   try {
     const projectDir = process.argv[2] && String(process.argv[2]).trim() ? process.argv[2] : process.cwd();
+    const plopfilePath = process.argv[3] && String(process.argv[3]).trim() ? process.argv[3] : '';
+    const moduleKind = process.argv[4] && String(process.argv[4]).trim() ? process.argv[4] : 'cjs';
 
-    const plopfilePath = findPlopfile(projectDir);
     if (!plopfilePath) {
-      // Warn to stderr, but keep a valid JSON array on stdout
-      console.warn(`[plop] No plopfile found in directory: ${projectDir}`);
+      console.warn('[plop] Missing plopfile path argument');
       console.log('[]');
       return;
     }
@@ -54,8 +52,11 @@ async function main() {
       return;
     }
 
+    // For ESM plopfiles, create a small CJS bridge that imports the ESM module and exports a function
+    const entryPath = moduleKind === 'esm' ? createEsmBridge(plopfilePath) : plopfilePath;
+
     // nodePlop can be sync or async depending on version; using await covers both
-    const plop = await nodePlop(plopfilePath, { destBasePath: projectDir });
+    const plop = await nodePlop(entryPath, { destBasePath: projectDir });
     const list = typeof plop.getGeneratorList === 'function' ? plop.getGeneratorList() : [];
     const result = Array.isArray(list)
       ? list.map((g) => ({ name: g.name || '', description: g.description || '' }))
