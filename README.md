@@ -1,6 +1,10 @@
 Plop for JetBrains IDEs
 =======================
 
+### [Get the plugin on JetBrains Marketplace](https://plugins.jetbrains.com/plugin/29277-plop)
+
+<img width="640" height="400" alt="Screenshot Plop JetBrains Plugin" src="https://github.com/user-attachments/assets/a88e3427-5822-4acb-ba82-7cdb53a1a672" />
+
 Run [Plop code generators](https://plopjs.com) right from your JetBrains IDE. The plugin detects your project's plopfile, lists available generators, and adds a Plop submenu to the New context menu so you can scaffold files without leaving the IDE.
 
 Features
