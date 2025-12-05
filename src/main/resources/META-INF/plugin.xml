@@ -32,6 +32,8 @@
     <!-- Product and plugin compatibility requirements.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
     <depends>com.intellij.modules.platform</depends>
+    <!-- Require JavaScript module so the plugin is only installable in IDEs with JS support -->
+    <depends>com.intellij.modules.javascript</depends>
 
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
@@ -42,10 +44,8 @@
         <!-- Project-level service that provides Plop generators -->
     </extensions>
 
-    <!-- Optional dependency on the NodeJS plugin. The config-file is required by the platform schema
-         even if we don't contribute any extensions that depend on NodeJS. The referenced file can be
-         an empty descriptor. -->
-    <depends optional="true" config-file="plugin-nodejs.xml">NodeJS</depends>
+    <!-- Require NodeJS plugin so the plugin is installable only where Node support is available -->
+    <depends>NodeJS</depends>
 
     <!-- Actions and groups contributed by the plugin -->
     <actions>

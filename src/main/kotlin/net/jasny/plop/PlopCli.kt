@@ -285,22 +285,6 @@ class PlopCli(private val project: Project) {
      * is configured. Returns the absolute path to the Node executable, or null on failure.
      */
     private fun resolveNodeInterpreterPath(): String? {
-        val nodePluginId = PluginId.getId("NodeJS")
-
-        val descriptor = PluginManagerCore.getPlugin(nodePluginId)
-        val isInstalledAndEnabled = descriptor != null && descriptor.isEnabled
-        if (!isInstalledAndEnabled) {
-            log.warn("Node.js plugin is not installed or disabled")
-            NotificationGroupManager.getInstance()
-                .getNotificationGroup("Plop Notifications")
-                .createNotification(
-                    "Plop: Node.js plugin is not installed or disabled. Enable it to list Plop generators.",
-                    NotificationType.ERROR
-                )
-                .notify(project)
-            return null
-        }
-
         // Access NodeJsInterpreterManager via reflection to avoid a hard compile-time dependency.
         // This keeps the plugin loading even in IDEs without the Node.js plugin.
         return try {

@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "net.jasny"
-version = "1.0-SNAPSHOT"
+version = "1.0.0"
 
 repositories {
     mavenCentral()
@@ -35,8 +35,36 @@ intellijPlatform {
         }
 
         changeNotes = """
-            Initial version
+            Initial 1.0.0 release
         """.trimIndent()
+    }
+
+    pluginVerification {
+        ides {
+            create("IU", "2025.2")
+            create("WS", "2025.2")
+        }
+    }
+
+    // Configure plugin signing and publishing to JetBrains Marketplace
+    signing {
+        certificateChainFile.set(
+            layout.projectDirectory.file(
+                providers.gradleProperty("marketplace.certChain").get()
+            )
+        )
+        privateKeyFile.set(
+            layout.projectDirectory.file(
+                providers.gradleProperty("marketplace.privateKey").get()
+            )
+        )
+    }
+
+    publishing {
+        // Marketplace token: set INTELLIJ_PUBLISH_TOKEN in your environment or gradle.properties
+        token.set(providers.environmentVariable("INTELLIJ_PUBLISH_TOKEN"))
+        // Default release channel; adjust as needed, e.g., "beta" or multiple channels
+        channels.set(listOf("default"))
     }
 }
 
